@@ -1,0 +1,180 @@
+---
+title: "Análise da Eficiência Produtiva - UFSCar Lagoa do Sino"
+author: Jade, Denner, Iuri e Leandro
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+# Leitura dos dados
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+#citation("radiant.data")
+library(radiant.data) # dp ponderado
+library(kableExtra)
+d<-read.table("./data/data.txt",h=T)
+normas<-read.table("./data/standards.txt",h=TRUE)
+dados<-as.data.frame(d[d$cultura=="SOJA",])
+attach(dados)
+table(dados$regiao)
+nomes<-c("Restante do País", "Paraná e São Paulo", "Sul (exceto Paraná)")
+```
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+# País
+pais<-dados[regiao=="PAIS",]
+w.pais<-pais$area/sum(pais$area)
+# rendimento médio ponderado
+(mp.pais<-weighted.mean(pais$rend,w.pais))
+#desvio-padrão ponderado
+(dp.pais<-weighted.sd(pais$rend,w.pais))
+# Norma
+norma.pais<-normas$norma[(normas$cultura=="SOJA")&(normas$regiao=="PAIS")]
+
+# PRSP
+prsp<-dados[regiao=="PRSP",]
+w.prsp<-prsp$area/sum(prsp$area)
+# rendimento médio ponderado
+(mp.prsp<-weighted.mean(prsp$rend,w.prsp))
+#desvio-padrão ponderado
+(dp.prsp<-weighted.sd(prsp$rend,w.prsp))
+# Norma
+norma.prsp<-normas$norma[(normas$cultura=="SOJA")&(normas$regiao=="PRSP")]
+
+# SUL
+sul<-dados[regiao=="SUL",]
+w.sul<-sul$area/sum(sul$area)
+# rendimento médio ponderado
+(mp.sul<-weighted.mean(sul$rend,w.sul))
+#desvio-padrão ponderado
+(dp.sul<-weighted.sd(sul$rend,w.sul))
+# Norma
+norma.sul<-normas$norma[(normas$cultura=="SOJA")&(normas$regiao=="SUL")]
+
+# Bootstrap para reconstituir a distribuição dos dados
+set.seed(24081986)
+xx.pais<-sample(pais$rend,10000,prob=w.pais,replace=T)
+sd(xx.pais)
+xx.prsp<-sample(prsp$rend,10000,prob=w.prsp,replace=T)
+sd(xx.prsp)
+xx.sul<-sample(sul$rend,10000,prob=w.sul,replace=T)
+
+teste<-c(xx.pais,xx.prsp,xx.sul)
+mean(teste); sd(teste); quantile(teste,c(0.025,0.975))
+
+# Pencentis
+(p.pais <-quantile(xx.pais,c(0.01,0.03)))
+(p.prsp <-quantile(xx.prsp,c(0.01,0.03)))  
+(p.sul <-quantile(xx.sul,c(0.01,0.03)))
+(med<-c(median(xx.pais),median(xx.prsp),median(xx.sul)))
+# comparação com a norma
+# Qual é a probabilidade de valores abaixo da norma? 
+(po.pais<-round(sum(xx.pais<norma.pais)/length(xx.pais),4))
+(po.prsp<-round(sum(xx.prsp<norma.prsp)/length(xx.prsp),4))
+(po.sul<-round(sum(xx.sul<norma.sul)/length(xx.sul),4))
+# teste
+# pais
+sum(pais$rend<norma.pais); 
+pais[pais$rend<norma.pais,]
+summary(pais$area)
+# prsp
+sum(prsp$rend<norma.prsp); 
+prsp[prsp$rend<norma.prsp,]
+summary(prsp$area)
+# sul
+sum(sul$rend<norma.sul); 
+sul[sul$rend<norma.sul,]
+summary(sul$area)
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, comment=FALSE}
+tab<-data.frame(list("Região"=c("Restante do País","Paraná / São Paulo","Sul exceto Paraná"),
+"Média"=round(c(mp.pais,mp.prsp,mp.sul)),
+"Mediana"=med,"Desvio-Padrão"=round(c(dp.pais,dp.prsp,dp.sul)),
+"Norma"=c(norma.pais,norma.prsp,norma.sul),
+#"Perc. norma"=c(po.pais,po.prsp,po.sul),
+"P1"=c(p.pais[1],p.prsp[1],p.sul[1]),
+"P3"=c(p.pais[2],p.prsp[2],p.sul[2]))
+)
+tab %>%
+  kbl(caption = "Recreating booktabs style table") %>%
+  kable_classic(full_width = F, html_font = "Cambria")
+```
+
+
+```{r}
+#install.packages("mixtools")
+library(mixtools)
+#citation("mixtools")
+soja.pais <- normalmixEM(xx.pais)
+soja.prsp <- normalmixEM(xx.prsp)
+soja.sul <- normalmixEM(xx.sul)
+par(mfrow=c(3,1))
+plot(soja.prsp, whichplots=2, density=TRUE, cex.axis=1.4, cex.lab=1.4, cex.main=1.8,main2="Paraná / São Paulo", xlab2="Rendimento (kg/ha)")
+#png("fig.art3.png",units="in",width=8,height=5,res=600)
+plot(soja.sul, whichplots=2, density=TRUE, cex.axis=1.4, cex.lab=1.4, cex.main=1.8,main2="Sul (exceto Paraná)", xlab2="Rendimento (kg/ha)")
+#dev.off()
+plot(soja.pais, whichplots=2, density=TRUE, cex.axis=1.4, cex.lab=1.4, cex.main=1.8,main2="Restante do País", xlab2="Rendimento (kg/ha)")
+```
+
+```{r}
+# teste de igualdade de médias e variâncias
+# Pais
+# teste para as médias ***
+test.equality(y = xx.pais, arbmean = FALSE, arbvar = TRUE)
+# teste para as variâncias ***
+test.equality(y = xx.pais, arbmean = TRUE, arbvar = FALSE)
+# PRSP
+# teste para as médias ***
+test.equality(y = xx.prsp, arbmean = FALSE, arbvar = TRUE)
+# teste para as variâncias *** 
+test.equality(y = xx.prsp, arbmean = TRUE, arbvar = FALSE)
+# SUL
+# teste para as médias  ***
+test.equality(y = xx.sul, arbmean = FALSE, arbvar = TRUE)
+# teste para as variâncias ***
+test.equality(y = xx.sul, arbmean = TRUE, arbvar = FALSE)
+```
+
+# Interpretação - teste `equality.test` do `mixtools` 
+
+```{r}
+library(spatstat)
+#citation("spatstat")
+#png("fig.art2.png",units="in",width=12,height=3.5,res=600)
+par(mfrow=c(1,3))
+# Pais
+obj.pais<-ewcdf(pais$rend,w.pais,normalise=TRUE, adjust=1)
+plot(obj.pais,xlab="Rendimento (kg/ha)",ylab="Prob. Acumulada",cex.lab=1.5,main="Restante do País",xlim=c(0,7000))
+points(norma.pais,po.pais,cex=2,col=1,lwd=5,pch=19)
+abline(v=norma.pais,lwd=2,lty=2,col=1)
+# ponto de corte sugerido por nós
+points(p.pais[1],0.01,cex=2,col="blue",lwd=5,pch=19)
+abline(v=p.pais[1],lwd=2,lty=3,col="blue")
+points(p.pais[2],0.03,cex=2,col="red",lwd=5,pch=19)
+abline(v=p.pais[2],lwd=2,col="red",lty=4)
+# PRSP
+obj.prsp<-ewcdf(prsp$rend,w.prsp,normalise=TRUE, adjust=1)
+plot(obj.prsp,xlab="Rendimento (kg/ha)",ylab="Prob. Acumulada",cex.lab=1.5,main="Paraná / São Paulo",xlim=c(0,7000))
+points(norma.prsp,po.prsp,cex=2,col=1,lwd=5,pch=19)
+abline(v=norma.prsp,lwd=2,lty=2,col=1)
+# ponto de corte sugerido por nós
+points(p.prsp[1],0.01,cex=2,col="blue",lwd=5,pch=19)
+abline(v=p.prsp[1],lwd=2,lty=3,col="blue")
+points(p.prsp[2],0.03,cex=2,col="red",lwd=5,pch=19)
+abline(v=p.prsp[2],lwd=2,col="red",lty=4)
+# sul
+obj.sul<-ewcdf(sul$rend,w.sul,normalise=TRUE, adjust=1)
+plot(obj.sul,xlab="Rendimento (kg/ha)",ylab="Prob. Acumulada",cex.lab=1.5,main="Sul (exceto Paraná)",xlim=c(0,7000))
+points(norma.sul,po.sul,cex=2,col=1,lwd=5,pch=19)
+abline(v=norma.sul,lwd=2,lty=2,col=1)
+# ponto de corte sugerido por nós
+points(p.sul[1],0.01,cex=2,col="blue",lwd=5,pch=19)
+abline(v=p.sul[1],lwd=2,lty=3,col="blue")
+points(p.sul[2],0.03,cex=2,col="red",lwd=5,pch=19)
+abline(v=p.sul[2],lwd=2,col="red",lty=4)
+#dev.off()
+```
+
+
